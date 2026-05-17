@@ -1,0 +1,1260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>伞锁班智能生产看板 | 航空军工驾驶舱</title>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+        }
+
+        body {
+            background: radial-gradient(circle at 20% 30%, #0a0f1e, #05080f);
+            font-family: 'Segoe UI', 'Inter', 'Poppins', 'Roboto', 'Microsoft YaHei', sans-serif;
+            padding: 16px 20px;
+            min-height: 100vh;
+            position: relative;
+            overflow-x: auto;
+        }
+
+        #dynamic-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: block;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .fighter-silhouette {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            width: 70%;
+            max-width: 1000px;
+            min-width: 400px;
+            pointer-events: none;
+            z-index: 1;
+            opacity: 0.22;
+            transform: translate(-50%, -50%) rotate(-22deg);
+            animation: floatFighter 8s ease-in-out infinite;
+            filter: drop-shadow(0 0 15px rgba(0, 255, 255, 0.4));
+        }
+
+        @keyframes floatFighter {
+            0% { transform: translate(-50%, -50%) rotate(-22deg) translateX(0px) translateY(0px); }
+            50% { transform: translate(-50%, -50%) rotate(-22deg) translateX(15px) translateY(-20px); }
+            100% { transform: translate(-50%, -50%) rotate(-22deg) translateX(0px) translateY(0px); }
+        }
+
+        .dashboard {
+            display: flex;
+            gap: 0;
+            max-width: 100%;
+            margin: 0 auto;
+            height: calc(100vh - 32px);
+            min-height: 700px;
+            position: relative;
+            z-index: 2;
+        }
+
+        .panel-primary {
+            flex: var(--left-flex, 1);
+            background: rgba(18, 25, 45, 0.75);
+            backdrop-filter: blur(18px);
+            border-radius: 32px;
+            border: 1px solid rgba(0, 255, 255, 0.25);
+            box-shadow: 0 20px 35px -12px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+            overflow-y: auto;
+            transition: flex 0.05s linear;
+        }
+
+        .resizer-vertical {
+            width: 8px;
+            background: transparent;
+            cursor: ew-resize;
+            transition: background 0.2s;
+            margin: 0 4px;
+            border-radius: 4px;
+            flex-shrink: 0;
+        }
+        .resizer-vertical:hover {
+            background: rgba(0, 255, 255, 0.5);
+        }
+
+        .panel-stack {
+            flex: var(--right-flex, 1);
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+            overflow: hidden;
+        }
+
+        .stack-resizer-wrapper {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        .panel-secondary {
+            background: rgba(18, 25, 45, 0.75);
+            backdrop-filter: blur(18px);
+            border-radius: 32px;
+            border: 1px solid rgba(0, 212, 255, 0.2);
+            box-shadow: 0 15px 30px -10px rgba(0,0,0,0.4);
+            overflow-y: auto;
+            transition: flex 0.05s linear;
+        }
+        .resizer-horizontal {
+            height: 8px;
+            background: transparent;
+            cursor: ns-resize;
+            transition: background 0.2s;
+            margin: 4px 0;
+            border-radius: 4px;
+            flex-shrink: 0;
+        }
+        .resizer-horizontal:hover {
+            background: rgba(0, 255, 255, 0.5);
+        }
+
+        .panel-header {
+            padding: 20px 24px 12px 24px;
+            border-bottom: 1px solid rgba(0, 255, 255, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .panel-header h2 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            background: linear-gradient(135deg, #C0F2FF, #7CB9E8);
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+            letter-spacing: 1px;
+            text-shadow: 0 0 8px rgba(0,160,255,0.2);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .status-count {
+            font-size: 0.8rem;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 4px 10px;
+            border-radius: 20px;
+            color: #ccf4ff;
+            letter-spacing: normal;
+        }
+        .dynamic-icon {
+            display: inline-block;
+            animation: iconBlurBrightPulse 3s ease-in-out infinite;
+            transform-origin: center;
+        }
+        @keyframes iconBlurBrightPulse {
+            0% { filter: blur(2px) brightness(1); text-shadow: 0 0 2px rgba(0,255,255,0.3); opacity: 0.8; }
+            50% { filter: blur(0px) brightness(1.3); text-shadow: 0 0 12px rgba(0,255,255,0.9); opacity: 1; }
+            100% { filter: blur(2px) brightness(1); text-shadow: 0 0 2px rgba(0,255,255,0.3); opacity: 0.8; }
+        }
+
+        .metrics-horizontal {
+            display: flex;
+            flex-direction: row;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 20px 24px;
+            background: rgba(0, 0, 0, 0.2);
+            margin-bottom: 8px;
+            flex-wrap: wrap;
+        }
+        .metric-card-h {
+            flex: 1;
+            background: rgba(10, 20, 35, 0.7);
+            border-radius: 20px;
+            border-left: 3px solid #0ff;
+            backdrop-filter: blur(4px);
+            display: flex;
+            flex-direction: column;
+            min-width: 120px;
+            min-height: 180px;
+            padding: 12px 16px;
+            box-shadow: 0 8px 16px -6px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            transition: box-shadow 0.2s;
+        }
+        .metric-card-h:hover {
+            box-shadow: 0 12px 24px -8px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }
+        .pie-chart-container {
+            align-items: center;
+            justify-content: flex-start;
+        }
+        .metric-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: #8fb4e6;
+            text-align: center;
+            margin-bottom: 12px;
+        }
+        .pie-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            flex: 1;
+        }
+        canvas.pie-canvas {
+            display: block;
+            margin: 0 auto;
+            width: 100px;
+            height: 100px;
+            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3));
+        }
+        .pie-percent {
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin-top: 8px;
+            color: #eef5ff;
+            text-align: center;
+        }
+        .value-container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 108px;
+        }
+        .metric-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #eef5ff;
+            line-height: 1.2;
+            text-align: center;
+        }
+
+        .data-table-wrapper {
+            padding: 0 20px 20px 20px;
+            overflow-x: auto;
+            overflow-y: auto;
+            max-height: calc(100% - 140px);
+            background: transparent;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.75rem;
+            color: #e0edff;
+            background: transparent;
+            table-layout: auto;
+        }
+        th, td {
+            text-align: center;
+            border-bottom: 1px solid rgba(72, 120, 184, 0.3);
+            transition: all 0.1s ease;
+            padding: 8px 6px;
+            white-space: normal;
+            word-break: break-word;
+        }
+        th {
+            background: #0a1a2a;
+            padding: 15px 6px;
+            font-weight: 600;
+            color: #ffffff;
+            border-bottom: 2px solid #2d4968;
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            white-space: nowrap;
+            box-shadow: 0 1px 0 #2d4968;
+        }
+        td {
+            color: #ffffff;
+        }
+        td:first-child, th:first-child {
+            width: 50px;
+            min-width: 50px;
+            max-width: 50px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .repair-table {
+            table-layout: fixed;
+            min-width: 800px;
+        }
+        .repair-table th:first-child,
+        .repair-table td:first-child {
+            width: 70px !important;
+            min-width: 70px !important;
+            max-width: 70px !important;
+            white-space: nowrap;
+        }
+        .repair-table th:nth-child(2),
+        .repair-table td:nth-child(2) {
+            width: 100px;
+            min-width: 100px;
+            white-space: nowrap;
+        }
+        .repair-table th, .repair-table td {
+            white-space: nowrap;
+            overflow-x: hidden;
+            text-overflow: ellipsis;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 30px;
+            font-size: 0.7rem;
+            font-weight: bold;
+            white-space: nowrap;
+        }
+        .status-normal { background: #1f6e4340; color: #6feb9e; border: 0.5px solid #2ecc71; }
+        .status-warning { background: #d48f2b40; color: #f5b042; border: 0.5px solid #f39c12; }
+        .status-delay { background: #b3303040; color: #ff7b72; border: 0.5px solid #e74c3c; }
+        .status-pending { background: #b3303040; color: #ff7b72; border: 0.5px solid #e74c3c; }
+        .status-repairing { background: #d48f2b40; color: #f5b042; border: 0.5px solid #f39c12; }
+        .status-inspect { background: #2a6b9e40; color: #7fc9ff; border: 0.5px solid #4aa3ff; }
+        .urgency-emergency { background: #b3303040; color: #ff7b72; border: 0.5px solid #e74c3c; }
+        .urgency-normal { background: #d48f2b40; color: #f5b042; border: 0.5px solid #f39c12; }
+        .urgency-low { background: #1f6e4340; color: #6feb9e; border: 0.5px solid #2ecc71; }
+
+        tr:hover td {
+            background: rgba(100, 180, 255, 0.15);
+            box-shadow: inset 0 0 8px rgba(0, 200, 255, 0.3);
+        }
+
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: #0f1a24; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb { background: #2f6080; border-radius: 10px; }
+
+        .fullscreen-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.98);
+            backdrop-filter: blur(12px);
+            z-index: 2000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            visibility: hidden;
+            opacity: 0;
+            transition: visibility 0.2s, opacity 0.2s;
+        }
+        .fullscreen-modal.active {
+            visibility: visible;
+            opacity: 1;
+        }
+        .modal-container {
+            width: 100%;
+            height: 100%;
+            background: #0b1425;
+            border-radius: 0;
+            border: none;
+            box-shadow: none;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .modal-header {
+            padding: 20px 28px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #2f6080;
+            background: #0b1425;
+        }
+        .modal-title {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #b5e4ff;
+        }
+        .toolbar {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            padding: 12px 28px;
+            background: #030c17;
+            border-bottom: 1px solid #1e3a5f;
+        }
+        .tool-btn {
+            background: #132c42;
+            border: none;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 40px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+        .tool-btn.danger {
+            background: #5e2a2a;
+        }
+        .tool-btn:hover {
+            background: #2f6c8f;
+            transform: scale(1.02);
+            box-shadow: 0 0 10px rgba(0, 200, 255, 0.6);
+        }
+        .editable-table-wrap {
+            flex: 1;
+            overflow: auto;
+            padding: 20px;
+        }
+        .editable-table-wrap table input, .editable-table-wrap table select {
+            width: 100%;
+            background: #1e2a3e;
+            border: 1px solid #3b6e9f;
+            color: white;
+            border-radius: 8px;
+            padding: 6px 8px;
+            font-size: 0.8rem;
+            text-align: center;
+        }
+        .action-btn {
+            background: #3a2a2a;
+            border: none;
+            color: #ffaa88;
+            cursor: pointer;
+            font-size: 0.7rem;
+            padding: 4px 8px;
+            border-radius: 16px;
+            transition: all 0.2s ease;
+        }
+        .action-btn:hover {
+            background: #a04030;
+            color: white;
+            box-shadow: 0 0 8px rgba(255, 100, 50, 0.8);
+        }
+        .col-delete-btn {
+            background: none;
+            border: none;
+            color: #ff7b72;
+            cursor: pointer;
+            font-size: 1rem;
+            margin-left: 8px;
+            transition: all 0.2s ease;
+        }
+        .col-delete-btn:hover {
+            color: #ff3300;
+            text-shadow: 0 0 6px #ff3300;
+            transform: scale(1.1);
+        }
+        .sort-icon {
+            margin-left: 5px;
+            font-size: 0.7rem;
+            cursor: pointer;
+            color: #7fc9ff;
+            transition: all 0.2s ease;
+            display: inline-block;
+        }
+        .sort-icon:hover {
+            color: #0ff;
+            text-shadow: 0 0 6px #0ff;
+            transform: scale(1.1);
+        }
+        .move-col-btn {
+            background: none;
+            border: none;
+            color: #7fc9ff;
+            cursor: pointer;
+            font-size: 0.8rem;
+            margin: 0 2px;
+            transition: 0.2s;
+            display: inline-block;
+        }
+        .move-col-btn:hover {
+            color: #0ff;
+            text-shadow: 0 0 4px #0ff;
+            transform: scale(1.1);
+        }
+        .modal-footer {
+            padding: 16px 28px;
+            display: flex;
+            justify-content: flex-end;
+            gap: 20px;
+            border-top: 1px solid #1e3a5f;
+            background: #0b1425;
+        }
+        .btn-save {
+            background: #0f6b5e;
+            padding: 10px 28px;
+            border-radius: 40px;
+            font-weight: bold;
+        }
+        .btn-close {
+            background: #2f4858;
+        }
+
+        .panel-primary, .panel-secondary {
+            cursor: pointer;
+            transition: 0.1s linear;
+        }
+        .panel-primary:hover, .panel-secondary:hover {
+            border-color: rgba(0, 255, 255, 0.6);
+            box-shadow: 0 0 12px rgba(0, 200, 255, 0.2);
+        }
+
+        .fullscreen-toggle {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 56px;
+            height: 56px;
+            background: rgba(0, 40, 60, 0.85);
+            backdrop-filter: blur(8px);
+            border: 1px solid #0ff;
+            border-radius: 50%;
+            color: #0ff;
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            z-index: 150;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+        .fullscreen-toggle:hover {
+            background: #0ff;
+            color: #0a0f1e;
+            box-shadow: 0 0 15px #0ff;
+            transform: scale(1.05);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="dynamic-bg"></canvas>
+    <div class="fighter-silhouette">
+        <svg viewBox="0 0 800 600" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M180,280 L620,120 L720,160 L650,220 L760,240 L780,280 L720,300 L640,280 L580,320 L520,400 L460,420 L420,380 L380,340 L320,330 L260,340 L220,360 L180,340 L140,310 L160,290 L180,280Z" fill="rgba(100,210,255,0.85)" stroke="#0ff" stroke-width="3" stroke-linejoin="round" filter="url(#glow)"/>
+            <path d="M460,300 L520,280 L560,260 L540,300 L520,340 L480,350 L460,320Z" fill="#88ddff" stroke="#0ff" stroke-width="1.5"/>
+            <circle cx="640" cy="200" r="12" fill="#aaffff" stroke="#0ff" stroke-width="2"/>
+            <path d="M320,390 L280,430 L240,460 L200,440 L240,410 L280,370 L320,390Z" fill="#66ccff" stroke="#0ff" stroke-width="1.5"/>
+            <path d="M160,290 L110,270 L80,280 L90,300 L130,310 L160,290Z" fill="#55bbff" stroke="#0ff" stroke-width="1"/>
+            <path d="M650,220 L700,200 L740,210 L720,240 L680,250 L650,220Z" fill="#77ddfe" stroke="#0ff" stroke-width="1.2"/>
+            <defs>
+                <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+                    <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
+                    <feMerge>
+                        <feMergeNode in="offsetblur" />
+                        <feMergeNode in="SourceGraphic" />
+                    </feMerge>
+                </filter>
+            </defs>
+        </svg>
+    </div>
+
+    <div class="fullscreen-toggle" id="fullscreenToggleBtn" title="全屏模式">⛶</div>
+
+    <div class="dashboard">
+        <div class="panel-primary" data-panel-id="production">
+            <div class="panel-header">
+                <h2><span class="dynamic-icon">✈️</span> 伞锁班月度批产进度概览</h2>
+                <div id="prodStatusCount" class="status-count"></div>
+            </div>
+            <div id="production-metrics" class="metrics-horizontal"></div>
+            <div class="data-table-wrapper">
+                <table id="production-table-main">
+                    <thead id="prod-table-head"></thead>
+                    <tbody id="prod-table-body"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="resizer-vertical" id="resizerVertical"></div>
+
+        <div class="panel-stack" id="stackContainer">
+            <div class="panel-secondary" data-panel-id="repair" id="repairPanel">
+                <div class="panel-header">
+                    <h2><span class="dynamic-icon">🛠️</span> 应急维修产品进度追踪</h2>
+                    <div id="repairStatusCount" class="status-count"></div>
+                </div>
+                <div class="data-table-wrapper">
+                    <table id="repair-table-main" class="repair-table">
+                        <thead id="repair-head"></thead>
+                        <tbody id="repair-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="resizer-horizontal" id="resizerHorizontal"></div>
+
+            <div class="panel-secondary" data-panel-id="issue" id="issuePanel">
+                <div class="panel-header">
+                    <h2><span class="dynamic-icon">⚠️</span> 问题看板</h2>
+                    <div id="issueUrgencyCount" class="status-count"></div>
+                </div>
+                <div class="data-table-wrapper">
+                    <table id="issue-table-main" class="issue-table">
+                        <thead id="issue-head"></thead>
+                        <tbody id="issue-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="editModal" class="fullscreen-modal">
+        <div class="modal-container">
+            <div class="modal-header">
+                <div class="modal-title" id="modalTitle">编辑板块</div>
+                <button id="closeModalBtn" style="background:none; border:none; color:#0ff; font-size:28px; cursor:pointer;">&times;</button>
+            </div>
+            <div class="toolbar" id="modalToolbar"></div>
+            <div class="editable-table-wrap" id="modalTableContainer"></div>
+            <div class="modal-footer">
+                <button class="tool-btn btn-save" id="saveEditBtn">💾 保存并同步</button>
+                <button class="tool-btn btn-close" id="cancelEditBtn">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ======================= 数据定义 =======================
+        let prodData = {
+            columns: ["零件代号", "零件名称", "批次", "计划数量", "完成数量", "完成率", "状态", "瓶颈/备注分析"],
+            rows: [
+                ["XXXXXX", "锁体组件", "B001", "200", "200", "100%", "正常", "效率达标，已提前完成批次任务。"],
+                ["XXXXXX", "弹簧卡销", "B001", "150", "145", "96.7%", "预警", "新员工熟练度不足，装配速度较慢。"],
+                ["XXXXXX", "密封垫圈", "B002", "300", "280", "93.3%", "预警", "密封圈外协件供应延迟，缺料影响。"],
+                ["XXXXXX", "核心电机", "B003", "100", "75", "75.0%", "延误", "瓶颈：核心电机部件质检不合格，正在返工。"]
+            ],
+            wip: 55
+        };
+        let repairData = {
+            columns: ["产品编号", "产品代号", "产品名称", "送修时间", "状态", "负责人", "计划完成时间"],
+            rows: [
+                ["WX2401", "SD-01", "应急伞降控制器", "2026-04-10", "修理中", "张工", "2026-04-22"],
+                ["WX2402", "SD-02", "定位导航模块", "2026-04-12", "待检验", "李铭", "2026-04-20"],
+                ["WX2403", "SD-03", "电源管理单元", "2026-04-05", "待修理", "王强", "2026-04-18"],
+                ["WX2404", "SD-04", "舵机驱动组件", "2026-04-15", "待修理", "赵岩", "2026-04-25"]
+            ]
+        };
+        let issueData = {
+            columns: ["图号", "名称", "问题描述", "时间节点", "责任人/部门", "紧急程度", "备注"],
+            rows: [
+                ["Fig-001", "锁紧装置", "装配间隙超差", "2026-05-20", "张工", "紧急", "待复检"],
+                ["Fig-002", "控制模块", "软件闪退", "2026-05-18", "李铭", "一般", "已提交补丁"],
+                ["Fig-003", "电源单元", "电压不稳", "2026-05-25", "王强", "不紧急", "采购新元件"]
+            ]
+        };
+
+        // ========== 本地存储 ==========
+        const STORAGE_KEYS = {
+            PROD: 'prodData',
+            REPAIR: 'repairData',
+            ISSUE: 'issueData',
+            LAYOUT: 'layoutSettings'
+        };
+
+        function saveDataToLocal() {
+            try {
+                localStorage.setItem(STORAGE_KEYS.PROD, JSON.stringify({
+                    columns: prodData.columns,
+                    rows: prodData.rows,
+                    wip: prodData.wip
+                }));
+                localStorage.setItem(STORAGE_KEYS.REPAIR, JSON.stringify({
+                    columns: repairData.columns,
+                    rows: repairData.rows
+                }));
+                localStorage.setItem(STORAGE_KEYS.ISSUE, JSON.stringify({
+                    columns: issueData.columns,
+                    rows: issueData.rows
+                }));
+            } catch(e) { console.warn(e); }
+        }
+
+        function loadDataFromLocal() {
+            try {
+                const prod = localStorage.getItem(STORAGE_KEYS.PROD);
+                if (prod) { const p = JSON.parse(prod); prodData.columns = p.columns; prodData.rows = p.rows; prodData.wip = p.wip; }
+                const rep = localStorage.getItem(STORAGE_KEYS.REPAIR);
+                if (rep) { const r = JSON.parse(rep); repairData.columns = r.columns; repairData.rows = r.rows; }
+                const iss = localStorage.getItem(STORAGE_KEYS.ISSUE);
+                if (iss) { const i = JSON.parse(iss); issueData.columns = i.columns; issueData.rows = i.rows; }
+            } catch(e) { console.warn(e); }
+        }
+
+        // ========== 拖拽调整大小 ==========
+        let leftFlex = 1, rightFlex = 1, topFlex = 1, bottomFlex = 1;
+        const leftPanel = document.querySelector('.panel-primary');
+        const rightStack = document.querySelector('.panel-stack');
+        const repairPanel = document.getElementById('repairPanel');
+        const issuePanel = document.getElementById('issuePanel');
+        const resizerVertical = document.getElementById('resizerVertical');
+        const resizerHorizontal = document.getElementById('resizerHorizontal');
+
+        function loadLayout() {
+            try {
+                const saved = localStorage.getItem(STORAGE_KEYS.LAYOUT);
+                if (saved) {
+                    const layout = JSON.parse(saved);
+                    leftFlex = layout.leftFlex ?? 1;
+                    rightFlex = layout.rightFlex ?? 1;
+                    topFlex = layout.topFlex ?? 1;
+                    bottomFlex = layout.bottomFlex ?? 1;
+                }
+            } catch(e) {}
+            applyLayout();
+        }
+
+        function saveLayout() {
+            try {
+                localStorage.setItem(STORAGE_KEYS.LAYOUT, JSON.stringify({ leftFlex, rightFlex, topFlex, bottomFlex }));
+            } catch(e) {}
+        }
+
+        function applyLayout() {
+            document.documentElement.style.setProperty('--left-flex', leftFlex);
+            document.documentElement.style.setProperty('--right-flex', rightFlex);
+            if (repairPanel && issuePanel) {
+                repairPanel.style.flex = topFlex;
+                issuePanel.style.flex = bottomFlex;
+            }
+        }
+
+        let startX, startLeftFlex, startRightFlex;
+        function onMouseMoveVertical(e) {
+            const dx = e.clientX - startX;
+            const containerWidth = leftPanel.offsetWidth + rightStack.offsetWidth + resizerVertical.offsetWidth;
+            const deltaRatio = dx / containerWidth;
+            let newLeft = startLeftFlex + deltaRatio * (startLeftFlex + startRightFlex);
+            let newRight = startRightFlex - deltaRatio * (startLeftFlex + startRightFlex);
+            if (newLeft < 0.2) newLeft = 0.2;
+            if (newRight < 0.2) newRight = 0.2;
+            if (newLeft > 5) newLeft = 5;
+            if (newRight > 5) newRight = 5;
+            leftFlex = newLeft;
+            rightFlex = newRight;
+            applyLayout();
+        }
+        function onMouseUpVertical() {
+            document.removeEventListener('mousemove', onMouseMoveVertical);
+            document.removeEventListener('mouseup', onMouseUpVertical);
+            saveLayout();
+        }
+        function startDragVertical(e) {
+            startX = e.clientX;
+            startLeftFlex = leftFlex;
+            startRightFlex = rightFlex;
+            document.addEventListener('mousemove', onMouseMoveVertical);
+            document.addEventListener('mouseup', onMouseUpVertical);
+            e.preventDefault();
+        }
+        resizerVertical.addEventListener('mousedown', startDragVertical);
+
+        let startY, startTopFlex, startBottomFlex;
+        function onMouseMoveHorizontal(e) {
+            const dy = e.clientY - startY;
+            const stackHeight = repairPanel.offsetHeight + issuePanel.offsetHeight + resizerHorizontal.offsetHeight;
+            const deltaRatio = dy / stackHeight;
+            let newTop = startTopFlex + deltaRatio * (startTopFlex + startBottomFlex);
+            let newBottom = startBottomFlex - deltaRatio * (startTopFlex + startBottomFlex);
+            if (newTop < 0.2) newTop = 0.2;
+            if (newBottom < 0.2) newBottom = 0.2;
+            if (newTop > 5) newTop = 5;
+            if (newBottom > 5) newBottom = 5;
+            topFlex = newTop;
+            bottomFlex = newBottom;
+            applyLayout();
+        }
+        function onMouseUpHorizontal() {
+            document.removeEventListener('mousemove', onMouseMoveHorizontal);
+            document.removeEventListener('mouseup', onMouseUpHorizontal);
+            saveLayout();
+        }
+        function startDragHorizontal(e) {
+            startY = e.clientY;
+            startTopFlex = topFlex;
+            startBottomFlex = bottomFlex;
+            document.addEventListener('mousemove', onMouseMoveHorizontal);
+            document.addEventListener('mouseup', onMouseUpHorizontal);
+            e.preventDefault();
+        }
+        resizerHorizontal.addEventListener('mousedown', startDragHorizontal);
+
+        // 生产板块汇总计算
+        function calcProdSummary() {
+            let planIdx = prodData.columns.indexOf("计划数量");
+            let actualIdx = prodData.columns.indexOf("完成数量");
+            let totalPlan = 0, totalActual = 0;
+            for (let row of prodData.rows) {
+                let planVal = row[planIdx], actualVal = row[actualIdx];
+                let plan = (planVal !== undefined && planVal !== "" && !isNaN(parseFloat(planVal))) ? parseFloat(planVal) : 0;
+                let actual = (actualVal !== undefined && actualVal !== "" && !isNaN(parseFloat(actualVal))) ? parseFloat(actualVal) : 0;
+                totalPlan += plan; totalActual += actual;
+            }
+            let rate = totalPlan === 0 ? 0 : (totalActual / totalPlan * 100);
+            return { totalPlan, totalActual, rate, wip: prodData.wip };
+        }
+
+        function drawPieChart(canvasId, percent) {
+            const canvas = document.getElementById(canvasId);
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const size = 100;
+            canvas.width = size; canvas.height = size;
+            const centerX = size/2, centerY = size/2, radius = 40;
+            const startAngle = -Math.PI / 2;
+            const angle = (percent / 100) * Math.PI * 2;
+            const endAngle = startAngle + angle;
+            ctx.clearRect(0, 0, size, size);
+            ctx.shadowColor = "rgba(0,255,255,0.5)";
+            ctx.shadowBlur = 8;
+            ctx.beginPath(); ctx.arc(centerX, centerY, radius, 0, Math.PI * 2); ctx.fillStyle = "#2a3a55"; ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.beginPath(); ctx.moveTo(centerX, centerY); ctx.arc(centerX, centerY, radius, startAngle, endAngle); ctx.closePath();
+            let grad = ctx.createLinearGradient(centerX - radius*0.4, centerY - radius*0.4, centerX + radius*0.6, centerY + radius*0.6);
+            grad.addColorStop(0, '#0ff'); grad.addColorStop(1, '#2a8cff');
+            ctx.fillStyle = grad; ctx.fill();
+            ctx.beginPath(); ctx.arc(centerX, centerY, radius-2, 0, Math.PI*2); ctx.strokeStyle = "rgba(255,255,255,0.3)"; ctx.lineWidth = 1.5; ctx.stroke();
+            ctx.beginPath(); ctx.arc(centerX, centerY, 14, 0, Math.PI*2); ctx.fillStyle = "#0a1428"; ctx.fill();
+            ctx.beginPath(); ctx.arc(centerX, centerY, 12, 0, Math.PI*2); ctx.fillStyle = "#1e2f4a"; ctx.fill();
+            ctx.beginPath(); ctx.arc(centerX-3, centerY-3, 3, 0, Math.PI*2); ctx.fillStyle = "rgba(255,255,255,0.6)"; ctx.fill();
+        }
+
+        function moveColumn(dataObj, colIdx, direction) {
+            if (direction === 'left' && colIdx === 0) return;
+            if (direction === 'right' && colIdx === dataObj.columns.length - 1) return;
+            let newIdx = direction === 'left' ? colIdx - 1 : colIdx + 1;
+            let tempCol = dataObj.columns[colIdx];
+            dataObj.columns[colIdx] = dataObj.columns[newIdx];
+            dataObj.columns[newIdx] = tempCol;
+            for (let row of dataObj.rows) {
+                let tempVal = row[colIdx];
+                row[colIdx] = row[newIdx];
+                row[newIdx] = tempVal;
+            }
+            renderAll();
+            saveDataToLocal();
+        }
+
+        function updateStatusCounts() {
+            let prodStatus = { "正常": 0, "预警": 0, "延误": 0 };
+            let statusIdx = prodData.columns.indexOf("状态");
+            if (statusIdx !== -1) {
+                for (let row of prodData.rows) {
+                    let val = row[statusIdx];
+                    if (val && prodStatus.hasOwnProperty(val)) prodStatus[val]++;
+                }
+            }
+            document.getElementById("prodStatusCount").innerText = `正常:${prodStatus["正常"]} 预警:${prodStatus["预警"]} 延误:${prodStatus["延误"]}`;
+
+            let repairStatus = { "待修理": 0, "修理中": 0, "待检验": 0 };
+            let repStatusIdx = repairData.columns.indexOf("状态");
+            if (repStatusIdx !== -1) {
+                for (let row of repairData.rows) {
+                    let val = row[repStatusIdx];
+                    if (val && repairStatus.hasOwnProperty(val)) repairStatus[val]++;
+                }
+            }
+            document.getElementById("repairStatusCount").innerText = `待修理:${repairStatus["待修理"]} 修理中:${repairStatus["修理中"]} 待检验:${repairStatus["待检验"]}`;
+
+            let issueUrgency = { "紧急": 0, "一般": 0, "不紧急": 0 };
+            let urgencyIdx = issueData.columns.indexOf("紧急程度");
+            if (urgencyIdx !== -1) {
+                for (let row of issueData.rows) {
+                    let val = row[urgencyIdx];
+                    if (val && issueUrgency.hasOwnProperty(val)) issueUrgency[val]++;
+                }
+            }
+            document.getElementById("issueUrgencyCount").innerText = `紧急:${issueUrgency["紧急"]} 一般:${issueUrgency["一般"]} 不紧急:${issueUrgency["不紧急"]}`;
+        }
+
+        function renderProductionPanel() {
+            let { totalPlan, totalActual, rate, wip } = calcProdSummary();
+            document.getElementById("production-metrics").innerHTML = `
+                <div class="metric-card-h pie-chart-container" style="flex:1.2;">
+                    <div class="metric-label">整体完成率</div>
+                    <div class="pie-wrapper"><canvas id="completionPieCanvas" class="pie-canvas"></canvas><div class="pie-percent">${rate.toFixed(1)}%</div></div>
+                </div>
+                <div class="metric-card-h"><div class="metric-label">计划总产出</div><div class="value-container"><div class="metric-value">${totalPlan} 件</div></div></div>
+                <div class="metric-card-h"><div class="metric-label">实际总产出</div><div class="value-container"><div class="metric-value">${totalActual} 件</div></div></div>
+                <div class="metric-card-h"><div class="metric-label">在制品库存</div><div class="value-container"><div class="metric-value">${wip} 件</div></div></div>
+            `;
+            drawPieChart("completionPieCanvas", rate);
+            let thead = '<tr><th style="width:50px;">序号</th>' + prodData.columns.map(c => `<th>${escapeHtml(c)}</th>`).join('') + '</tr>';
+            document.getElementById("prod-table-head").innerHTML = thead;
+            let tbody = '', statusIdx = prodData.columns.indexOf("状态");
+            for (let i = 0; i < prodData.rows.length; i++) {
+                let row = prodData.rows[i];
+                tbody += '<tr><td style="text-align:center;">' + (i+1) + '</td>';
+                for (let j = 0; j < row.length; j++) {
+                    let cell = row[j];
+                    if (j === statusIdx && cell && cell.trim() !== "") {
+                        let cls = cell === "正常" ? "status-normal" : (cell === "预警" ? "status-warning" : "status-delay");
+                        tbody += `<td><span class="status-badge ${cls}">${escapeHtml(cell)}</span></td>`;
+                    } else {
+                        tbody += `<td>${escapeHtml(cell)}</td>`;
+                    }
+                }
+                tbody += '</td>';
+            }
+            document.getElementById("prod-table-body").innerHTML = tbody;
+        }
+
+        function renderRepairPanel() {
+            let thead = '<table><th style="width:50px;">序号</th>' + repairData.columns.map(c => `<th>${escapeHtml(c)}</th>`).join('') + '<tr>';
+            document.getElementById("repair-head").innerHTML = thead;
+            let tbody = '', statusIdx = repairData.columns.indexOf("状态");
+            for (let i = 0; i < repairData.rows.length; i++) {
+                let row = repairData.rows[i];
+                tbody += '<tr><td style="text-align:center;">' + (i+1) + '</td>';
+                for (let j = 0; j < row.length; j++) {
+                    let cell = row[j];
+                    if (j === statusIdx && cell && cell.trim() !== "") {
+                        let cls = "";
+                        switch(cell) {
+                            case "待修理": cls = "status-pending"; break;
+                            case "修理中": cls = "status-repairing"; break;
+                            case "待检验": cls = "status-inspect"; break;
+                            default: cls = "status-warning";
+                        }
+                        tbody += `<td><span class="status-badge ${cls}">${escapeHtml(cell)}</span></td>`;
+                    } else {
+                        tbody += `<td>${escapeHtml(cell)}</td>`;
+                    }
+                }
+                tbody += '</table>';
+            }
+            document.getElementById("repair-body").innerHTML = tbody;
+        }
+
+        function renderIssuePanel() {
+            let thead = '<tr><th style="width:50px;">序号</th>' + issueData.columns.map(c => `<th>${escapeHtml(c)}</th>`).join('') + '</tr>';
+            document.getElementById("issue-head").innerHTML = thead;
+            let tbody = '', urgencyIdx = issueData.columns.indexOf("紧急程度");
+            for (let i = 0; i < issueData.rows.length; i++) {
+                let row = issueData.rows[i];
+                tbody += '<tr><td style="text-align:center;">' + (i+1) + '</td>';
+                for (let j = 0; j < row.length; j++) {
+                    let cell = row[j];
+                    if (j === urgencyIdx && cell && cell.trim() !== "") {
+                        let cls = cell === "紧急" ? "urgency-emergency" : (cell === "一般" ? "urgency-normal" : "urgency-low");
+                        tbody += `<td><span class="status-badge ${cls}">${escapeHtml(cell)}</span></td>`;
+                    } else {
+                        tbody += `<td>${escapeHtml(cell)}</td>`;
+                    }
+                }
+                tbody += '</tr>';
+            }
+            document.getElementById("issue-body").innerHTML = tbody;
+        }
+
+        function renderAll() {
+            renderProductionPanel();
+            renderRepairPanel();
+            renderIssuePanel();
+            updateStatusCounts();
+        }
+
+        function exportToExcel(panelName, columns, rows) {
+            let sheetData = [["序号", ...columns]];
+            for (let i = 0; i < rows.length; i++) sheetData.push([i+1, ...rows[i]]);
+            const ws = XLSX.utils.aoa_to_sheet(sheetData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, panelName);
+            XLSX.writeFile(wb, `${panelName}.xlsx`);
+        }
+
+        // 编辑模态框
+        let currentEditPanel = null;
+        let editColumns = [], editRows = [], extraEdit = null;
+
+        function openEditModal(panelId) {
+            currentEditPanel = panelId;
+            if (panelId === 'production') {
+                editColumns = [...prodData.columns];
+                editRows = prodData.rows.map(r => [...r]);
+                extraEdit = { wip: prodData.wip };
+            } else if (panelId === 'repair') {
+                editColumns = [...repairData.columns];
+                editRows = repairData.rows.map(r => [...r]);
+                extraEdit = null;
+            } else if (panelId === 'issue') {
+                editColumns = [...issueData.columns];
+                editRows = issueData.rows.map(r => [...r]);
+                extraEdit = null;
+            }
+            renderEditableModal();
+            document.getElementById("editModal").classList.add("active");
+        }
+
+        function sortTableByColumn(colIndex, ascending) {
+            if (editRows.length === 0) return;
+            const isNumeric = (v) => !isNaN(parseFloat(v)) && isFinite(v);
+            editRows.sort((a,b) => {
+                let va = a[colIndex] || "", vb = b[colIndex] || "";
+                let na = parseFloat(va), nb = parseFloat(vb);
+                if (isNumeric(va) && isNumeric(vb)) return ascending ? na - nb : nb - na;
+                let sa = String(va).toLowerCase(), sb = String(vb).toLowerCase();
+                return ascending ? sa.localeCompare(sb) : sb.localeCompare(sa);
+            });
+            renderEditableModal();
+        }
+
+        function getSelectOptions(panel, colName) {
+            if (panel === 'production' && colName === '状态') {
+                return ["正常", "预警", "延误"];
+            }
+            if (panel === 'repair' && colName === '状态') {
+                return ["待修理", "修理中", "待检验"];
+            }
+            if (panel === 'issue' && colName === '紧急程度') {
+                return ["紧急", "一般", "不紧急"];
+            }
+            return null;
+        }
+
+        function renderEditableModal() {
+            const container = document.getElementById("modalTableContainer");
+            const toolbar = document.getElementById("modalToolbar");
+            const modalTitle = document.getElementById("modalTitle");
+            let title = "";
+            if (currentEditPanel === 'production') title = "✏️ 编辑月度批产进度";
+            else if (currentEditPanel === 'repair') title = "✏️ 编辑应急维修追踪表";
+            else title = "✏️ 编辑问题看板";
+            modalTitle.innerText = title;
+
+            toolbar.innerHTML = `
+                <button class="tool-btn" id="addRowBtn">➕ 增加行</button>
+                <button class="tool-btn" id="addColBtn">📌 增加列</button>
+                <button class="tool-btn danger" id="delLastRowBtn">➖ 删除最后一行</button>
+                <button class="tool-btn danger" id="delLastColBtn">❌ 删除最后一列</button>
+                <button class="tool-btn" id="exportExcelBtn">📎 导出 Excel</button>
+                ${currentEditPanel === 'production' ? `<button class="tool-btn" id="editExtraBtn">⚙️ 编辑WIP</button>` : ''}
+                <span style="color:#8fb4e6; margin-left:10px;">💡 点击列头排序/移动列，点击行首/列尾删除</span>
+            `;
+
+            let html = '<div style="overflow-x:auto;"><table style="min-width:600px;"><thead><tr><th style="width:50px;">序号</th>';
+            for (let i = 0; i < editColumns.length; i++) {
+                html += `<th>${escapeHtml(editColumns[i])} 
+                            <span class="sort-icon" data-col="${i}" data-asc="true">🔼</span>
+                            <span class="sort-icon" data-col="${i}" data-asc="false">🔽</span>
+                            <button class="move-col-btn" data-col="${i}" data-dir="left" title="左移列">◀</button>
+                            <button class="move-col-btn" data-col="${i}" data-dir="right" title="右移列">▶</button>
+                            <button class="col-delete-btn" data-col="${i}" title="删除此列">🗑️</button>
+                         </th>`;
+            }
+            html += '<th style="width:50px;">操作</th></tr></thead><tbody>';
+            for (let r = 0; r < editRows.length; r++) {
+                html += '<tr><td style="text-align:center;">' + (r+1) + '</td>';
+                for (let c = 0; c < editColumns.length; c++) {
+                    let val = editRows[r][c] !== undefined ? editRows[r][c] : '';
+                    let colName = editColumns[c];
+                    let options = getSelectOptions(currentEditPanel, colName);
+                    if (options) {
+                        html += `<td><select data-row="${r}" data-col="${c}" class="editable-select">`;
+                        if (val === "" || val === undefined) {
+                            html += `<option value="" disabled selected>-- 请选择 --</option>`;
+                        } else {
+                            html += `<option value="" disabled>-- 请选择 --</option>`;
+                        }
+                        for (let opt of options) {
+                            let selected = (val === opt) ? 'selected' : '';
+                            html += `<option value="${escapeHtml(opt)}" ${selected}>${escapeHtml(opt)}</option>`;
+                        }
+                        html += `</select>`;
+                        html += `</td>`;
+                    } else {
+                        html += `<td><input type="text" value="${escapeHtml(val)}" data-row="${r}" data-col="${c}" class="editable-cell"></td>`;
+                    }
+                }
+                html += `<td><button class="action-btn" data-row="${r}" title="删除此行">❌ 删除行</button></td>`;
+                html += '</tr>';
+            }
+            html += '</tbody></table></div>';
+            container.innerHTML = html;
+
+            document.querySelectorAll('.sort-icon').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    let col = parseInt(btn.dataset.col);
+                    let ascending = btn.dataset.asc === 'true';
+                    sortTableByColumn(col, ascending);
+                });
+            });
+            document.querySelectorAll('.move-col-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    let colIdx = parseInt(btn.dataset.col);
+                    let dir = btn.dataset.dir;
+                    let target = null;
+                    if (currentEditPanel === 'production') target = prodData;
+                    else if (currentEditPanel === 'repair') target = repairData;
+                    else if (currentEditPanel === 'issue') target = issueData;
+                    if (target) {
+                        moveColumn(target, colIdx, dir);
+                        if (currentEditPanel === 'production') { editColumns = [...prodData.columns]; editRows = prodData.rows.map(r => [...r]); extraEdit.wip = prodData.wip; }
+                        else if (currentEditPanel === 'repair') { editColumns = [...repairData.columns]; editRows = repairData.rows.map(r => [...r]); }
+                        else if (currentEditPanel === 'issue') { editColumns = [...issueData.columns]; editRows = issueData.rows.map(r => [...r]); }
+                        renderEditableModal();
+                    }
+                });
+            });
+            document.querySelectorAll('.col-delete-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    let colIdx = parseInt(btn.dataset.col);
+                    if (editColumns.length <= 1) { alert("至少保留一列"); return; }
+                    editColumns.splice(colIdx, 1);
+                    for (let row of editRows) row.splice(colIdx, 1);
+                    renderEditableModal();
+                });
+            });
+            document.querySelectorAll('.action-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    let rowIdx = parseInt(btn.dataset.row);
+                    if (editRows.length <= 1) { alert("至少保留一行"); return; }
+                    editRows.splice(rowIdx, 1);
+                    renderEditableModal();
+                });
+            });
+            document.querySelectorAll('.editable-cell').forEach(input => {
+                input.addEventListener('change', (e) => {
+                    let row = parseInt(input.dataset.row);
+                    let col = parseInt(input.dataset.col);
+                    editRows[row][col] = input.value;
+                });
+            });
+            document.querySelectorAll('.editable-select').forEach(select => {
+                select.addEventListener('change', (e) => {
+                    let row = parseInt(select.dataset.row);
+                    let col = parseInt(select.dataset.col);
+                    let newVal = select.value;
+                    editRows[row][col] = newVal;
+                });
+            });
+
+            document.getElementById("addRowBtn").onclick = () => { editRows.push(new Array(editColumns.length).fill("")); renderEditableModal(); };
+            document.getElementById("addColBtn").onclick = () => { let name = prompt("新列名称:"); if(name) { editColumns.push(name); editRows.forEach(r => r.push("")); renderEditableModal(); } };
+            document.getElementById("delLastRowBtn").onclick = () => { if(editRows.length>1) editRows.pop(); renderEditableModal(); };
+            document.getElementById("delLastColBtn").onclick = () => { if(editColumns.length>1) { editColumns.pop(); editRows.forEach(r => r.pop()); renderEditableModal(); } };
+            document.getElementById("exportExcelBtn").onclick = () => {
+                let panelName = "";
+                if (currentEditPanel === 'production') panelName = "批产进度概览";
+                else if (currentEditPanel === 'repair') panelName = "应急维修追踪";
+                else panelName = "问题看板";
+                exportToExcel(panelName, editColumns, editRows);
+            };
+            if(currentEditPanel === 'production' && document.getElementById("editExtraBtn")) {
+                document.getElementById("editExtraBtn").onclick = () => { let w = prompt("在制品库存(WIP)件数:", extraEdit.wip); if(w!==null) extraEdit.wip = parseInt(w)||0; renderEditableModal(); };
+            }
+        }
+
+        function saveEditToMain() {
+            if(currentEditPanel === 'production') {
+                prodData.columns = [...editColumns];
+                prodData.rows = editRows.map(r => [...r]);
+                prodData.wip = extraEdit.wip;
+            } else if(currentEditPanel === 'repair') {
+                repairData.columns = [...editColumns];
+                repairData.rows = editRows.map(r => [...r]);
+            } else if(currentEditPanel === 'issue') {
+                issueData.columns = [...editColumns];
+                issueData.rows = editRows.map(r => [...r]);
+            }
+            renderAll();
+            saveDataToLocal();
+            closeModal();
+        }
+        function closeModal() { document.getElementById("editModal").classList.remove("active"); currentEditPanel = null; }
+
+        document.querySelectorAll('.panel-primary, .panel-secondary').forEach(panel => {
+            panel.addEventListener('dblclick', (e) => {
+                e.stopPropagation();
+                let id = panel.getAttribute('data-panel-id');
+                if (id === 'production') openEditModal('production');
+                else if (id === 'repair') openEditModal('repair');
+                else if (id === 'issue') openEditModal('issue');
+            });
+        });
+        document.getElementById("saveEditBtn").addEventListener('click', saveEditToMain);
+        document.getElementById("closeModalBtn").addEventListener('click', closeModal);
+        document.getElementById("cancelEditBtn").addEventListener('click', closeModal);
+
+        loadDataFromLocal();
+        renderAll();
+        loadLayout();
+
+        // 全屏切换
+        const fullscreenBtn = document.getElementById('fullscreenToggleBtn');
+        async function toggleFullscreen() {
+            try {
+                if (!document.fullscreenElement) {
+                    await document.documentElement.requestFullscreen();
+                    fullscreenBtn.innerHTML = '✖';
+                    fullscreenBtn.title = '退出全屏';
+                } else {
+                    await document.exitFullscreen();
+                    fullscreenBtn.innerHTML = '⛶';
+                    fullscreenBtn.title = '全屏模式';
+                }
+            } catch (err) {
+                alert('当前环境不支持全屏API，请手动按键盘 F11 键进入全屏模式。');
+            }
+        }
+        document.addEventListener('fullscreenchange', () => {
+            if (document.fullscreenElement) {
+                fullscreenBtn.innerHTML = '✖';
+                fullscreenBtn.title = '退出全屏';
+            } else {
+                fullscreenBtn.innerHTML = '⛶';
+                fullscreenBtn.title = '全屏模式';
+            }
+        });
+        fullscreenBtn.addEventListener('click', toggleFullscreen);
+
+        // 动态背景
+        const canvas = document.getElementById('dynamic-bg');
+        let ctx = canvas.getContext('2d');
+        let width, height, particles = [], radarAngle = 0, orbitOffset = 0;
+        function resizeCanvas() { width = window.innerWidth; height = window.innerHeight; canvas.width = width; canvas.height = height; }
+        class AviationParticle {
+            constructor() { this.reset(); }
+            reset() { this.x = Math.random() * width; this.y = Math.random() * height; this.vx = (Math.random() - 0.5)*0.6 + (Math.random()>0.7?0.4:-0.4); this.vy = (Math.random() - 0.5)*0.6 + (Math.random()>0.7?0.3:-0.3); this.size = 3+Math.random()*4; this.type = Math.random()>0.7?'parachute':'plane'; this.alpha = 0.4+Math.random()*0.5; }
+            update() { this.x += this.vx; this.y += this.vy; if(this.x<-50) this.x=width+50; if(this.x>width+50) this.x=-50; if(this.y<-50) this.y=height+50; if(this.y>height+50) this.y=-50; }
+            draw(ctx) {
+                ctx.save(); ctx.globalAlpha = this.alpha*0.7; ctx.shadowBlur=6; ctx.shadowColor="#0af";
+                if(this.type === 'plane') {
+                    let angle = Math.atan2(this.vy, this.vx);
+                    ctx.translate(this.x, this.y); ctx.rotate(angle);
+                    ctx.beginPath(); ctx.moveTo(8,0); ctx.lineTo(-4,-3); ctx.lineTo(-2,0); ctx.lineTo(-4,3); ctx.closePath(); ctx.fillStyle = "#7df9ff"; ctx.fill();
+                    ctx.beginPath(); ctx.arc(6,0,1.5,0,Math.PI*2); ctx.fillStyle = "#fff"; ctx.fill();
+                } else {
+                    ctx.beginPath(); ctx.arc(this.x, this.y, this.size*0.8, 0, Math.PI, true); ctx.fillStyle = "#88ccff"; ctx.fill();
+                    ctx.beginPath(); ctx.moveTo(this.x-this.size*0.6, this.y+this.size*0.5); ctx.lineTo(this.x, this.y+this.size*1.2); ctx.lineTo(this.x+this.size*0.6, this.y+this.size*0.5); ctx.fillStyle = "#b0e0ff"; ctx.fill();
+                    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(this.x-this.size*0.3, this.y+this.size*0.2, 1, 0, Math.PI*2); ctx.arc(this.x+this.size*0.3, this.y+this.size*0.2, 1, 0, Math.PI*2); ctx.fill();
+                }
+                ctx.restore();
+            }
+        }
+        function initParticles() { particles = []; for(let i=0;i<55;i++) particles.push(new AviationParticle()); }
+        function drawGrid() {
+            ctx.save(); ctx.globalAlpha = 0.2; ctx.strokeStyle = "#2cc"; ctx.lineWidth = 0.5;
+            let step=60, offX=(Date.now()*0.05)%step, offY=(Date.now()*0.03)%step;
+            for(let x=offX; x<width; x+=step) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,height); ctx.stroke(); }
+            for(let y=offY; y<height; y+=step) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(width,y); ctx.stroke(); }
+            ctx.restore(); ctx.save(); ctx.globalAlpha=0.25;
+            let cx=width*0.7, cy=height*0.3; radarAngle+=0.008;
+            for(let r=0;r<3;r++) { ctx.beginPath(); ctx.arc(cx,cy,80+r*40,0,Math.PI*2); ctx.strokeStyle="#0ff"; ctx.stroke(); }
+            ctx.beginPath(); let ex=cx+180*Math.cos(radarAngle), ey=cy+180*Math.sin(radarAngle); ctx.moveTo(cx,cy); ctx.lineTo(ex,ey); ctx.strokeStyle="#ffaa44"; ctx.lineWidth=1.5; ctx.stroke();
+            orbitOffset+=0.005;
+            for(let i=0;i<2;i++) { let r=140+i*40, off=orbitOffset+i; ctx.beginPath(); for(let a=0;a<=Math.PI*2;a+=0.1){ let x=width*0.2+Math.cos(a+off)*r, y=height*0.7+Math.sin(a*1.3+off)*r*0.6; if(a===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); } ctx.strokeStyle="rgba(0,200,255,0.35)"; ctx.stroke(); }
+            ctx.restore();
+        }
+        function animateBackground() { if(!ctx) return; ctx.clearRect(0,0,width,height); drawGrid(); particles.forEach(p=>{p.update(); p.draw(ctx);}); requestAnimationFrame(animateBackground); }
+        window.addEventListener('resize',()=>{resizeCanvas(); initParticles();});
+        resizeCanvas(); initParticles(); animateBackground();
+        function escapeHtml(str) { return String(str).replace(/[&<>]/g, function(m){if(m==='&') return '&amp;'; if(m==='<') return '&lt;'; if(m==='>') return '&gt;'; return m;}); }
+    </script>
+</body>
+</html>
